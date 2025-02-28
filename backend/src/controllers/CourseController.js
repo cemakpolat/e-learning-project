@@ -113,6 +113,44 @@ const getFeaturedCourses = async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 };
+
+
+const getCoursesPaginated = async (req, res) => {
+  const page = parseInt(req.query.page) || 1; // Default to page 1
+  let pageSize = parseInt(req.query.pageSize) || 10; // Default to 10 items per page
+  const MAX_PAGE_SIZE = 20; // Define the maximum page size
+
+  // Enforce the maximum page size
+  if (pageSize > MAX_PAGE_SIZE) {
+    pageSize = MAX_PAGE_SIZE;
+  }
+
+  const skip = (page - 1) * pageSize;
+
+  try {
+    const courseRepository = AppDataSource.getRepository(Course);
+
+    const [courses, total] = await courseRepository.findAndCount({
+      skip,
+      take: pageSize,
+    });
+
+    const totalPages = Math.ceil(total / pageSize);
+
+    res.status(200).json({
+      courses,
+      page,
+      pageSize,
+      total,
+      totalPages,
+    });
+  } catch (err) {
+    console.error('Get courses paginated error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+
 module.exports = {
     createCourse,
     getAllCourses,
@@ -120,4 +158,5 @@ module.exports = {
     updateCourse,
     deleteCourse,
     getFeaturedCourses,
+    getCoursesPaginated,
 }
