@@ -15,13 +15,14 @@ const roleMiddleware = require('../middleware/roleMiddleware');
 const router = express.Router();
 
 // Create a new course
-router.post('/',  authMiddleware, roleMiddleware(['admin', 'instructor','student']), createCourse);
+router.post('/', authMiddleware, roleMiddleware(['admin', 'instructor','student']), createCourse);
 
 router.get('/featured', authMiddleware, roleMiddleware(['admin', 'instructor','student']), getFeaturedCourses);
 
 
 // Get all courses
-router.get('/',  roleMiddleware(['admin', 'instructor', 'student']), getAllCourses);
+
+router.get('/',  authMiddleware, roleMiddleware(['admin', 'instructor', 'student']), getAllCourses);
 
 // Get a single course by ID
 router.get('/:id', getCourseById);
