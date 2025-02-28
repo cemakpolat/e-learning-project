@@ -7,9 +7,9 @@ const {
     deleteCourse,
     getFeaturedCourses,
 } = require('../controllers/CourseController');
+
 const authMiddleware = require('../middleware/auth');
 const roleMiddleware = require('../middleware/roleMiddleware');
-
 
 
 const router = express.Router();
