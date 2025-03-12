@@ -1,14 +1,14 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const AppDataSource = require('./data-source');
-const userRoutes = require('./routes/userRoutes');
-const courseRoutes = require('./routes/courseRoutes');
-const enrollmentRoutes = require('./routes/enrollmentRoutes');
-const progressRoutes = require('./routes/progressRoutes');
-const courseContentRoutes = require('./routes/courseContentRoutes');
-const notificationRoutes = require('./routes/notificationRoutes');
-const dashboardRoutes = require('./routes/dashboardRoutes');
-const analyticsRoutes = require('./routes/analyticsRoutes');
+const userRoutes = require('./routes/userRoute');
+const courseRoutes = require('./routes/courseRoute');
+const enrollmentRoutes = require('./routes/enrollmentRoute');
+const progressRoutes = require('./routes/progressRoute');
+const courseContentRoutes = require('./routes/courseContentRoute');
+const notificationRoutes = require('./routes/notificationRoute');
+const dashboardRoutes = require('./routes/dashboardRoute');
+const analyticsRoutes = require('./routes/analyticsRoute');
 const cors = require('cors');
 
 
