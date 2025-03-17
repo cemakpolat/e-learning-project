@@ -1,15 +1,16 @@
 //CourseController.js
-
 const AppDataSource = require('../data-source');
 const Course = require('../models/Course');
+const User = require('../models/User');
 const ApiError = require('../utils/apiError');
-const { createCourseSchema, updateCourseSchema } = require('../validation/modelValidations'); // Import schemas
+const ApiSuccess = require('../utils/apiSuccess');
+const { courseCreateSchema, courseUpdateSchema } = require('../validation/modelValidations'); 
 
 // Create a new course
 const createCourse = async (req, res, next) => {
     try {
         // Validate input
-        const { error, value } = createCourseSchema.validate(req.body); //Joi Validation
+        const { error, value } = courseCreateSchema.validate(req.body); //Joi Validation
         if (error) {
             return next(new ApiError(400, error.details[0].message)); // Bad Request
         }
@@ -23,7 +24,8 @@ const createCourse = async (req, res, next) => {
         });
 
         await courseRepository.save(course);
-        res.status(201).json({ message: 'Course created successfully', course });
+        
+        (new ApiSuccess(201, 'Course created successfully', course, null, null)).send(res);
     } catch (err) {
         console.error('Create course error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -35,7 +37,7 @@ const getAllCourses = async (req, res, next) => {
     try {
         const courseRepository = AppDataSource.getRepository(Course);
         const courses = await courseRepository.find();
-        res.status(200).json(courses);
+        (new ApiSuccess(200, 'Courses received successfully', courses, null, null)).send(res); 
     } catch (err) {
         console.error('Get all courses error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -53,7 +55,7 @@ const getCourseById = async (req, res, next) => {
             return next(new ApiError(404, 'Course not found'));
         }
 
-        res.status(200).json(course);
+        (new ApiSuccess(200, 'Course received successfully', course, null, null)).send(res); 
     } catch (err) {
         console.error(err);
         return next(new ApiError(500, 'Server error'));
@@ -64,7 +66,7 @@ const updateCourse = async (req, res, next) => {
     const { id } = req.params;
 
     try {
-        const { error, value } = updateCourseSchema.validate(req.body);
+        const { error, value } = courseUpdateSchema.validate(req.body);
         if (error) {
             return next(new ApiError(400, error.details[0].message));
         }
@@ -80,8 +82,7 @@ const updateCourse = async (req, res, next) => {
         course.description = description || course.description;
 
         await courseRepository.save(course);
-
-        res.status(200).json({ message: 'Course updated successfully', course });
+        (new ApiSuccess(200, 'Course updated successfully', course, null, null)).send(res); 
     } catch (err) {
         console.error(err);
         return next(new ApiError(500, 'Server error'));
@@ -99,12 +100,13 @@ const deleteCourse = async (req, res, next) => {
         }
 
         await courseRepository.remove(course);
-        res.status(200).json({ message: 'Course deleted successfully' });
+        (new ApiSuccess(200, 'Course deleted successfully', null, null, null)).send(res); 
     } catch (err) {
         console.error(err);
         return next(new ApiError(500, 'Server error'));
     }
 };
+
 
 const getFeaturedCourses = async (req, res, next) => {
     try {
@@ -120,7 +122,7 @@ const getFeaturedCourses = async (req, res, next) => {
             .limit(5) // Top 5 featured courses
             .getRawMany();
 
-        res.status(200).json(featuredCourses);
+        (new ApiSuccess(200, 'Featured courses received successfully', featuredCourses, null, null)).send(res); 
     } catch (err) {
         console.error('Get featured courses error:', err);
         return next(new ApiError(500, 'Server error'));

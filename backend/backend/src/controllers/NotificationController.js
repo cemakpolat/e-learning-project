@@ -2,6 +2,7 @@ const AppDataSource = require('../data-source');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
+const ApiSuccess = require('../utils/apiSuccess');
 const { sendEmail } = require('../services/emailService');
 const { notificationCreateSchema } = require('../validation/modelValidations');
 
@@ -38,7 +39,7 @@ const sendNotification = async (req, res, next) => {
         // Send an email to the user
         await sendEmail(user.email, 'New Notification', message);
 
-        res.status(201).json({ message: 'Notification sent successfully', notification });
+        (new ApiSuccess(201, 'Notification sent successfully', notification, null, null)).send(res);
     } catch (err) {
         console.error('Send notification error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -60,7 +61,7 @@ const getNotificationsByUser = async (req, res, next) => {
             order: { created_at: 'DESC' }, // Show latest notifications first
         });
 
-        res.status(200).json(notifications);
+        (new ApiSuccess(200, 'Notification received successfully', notifications, null, null)).send(res);
     } catch (err) {
         console.error('Get notifications error:', err);
         return next(new ApiError(500, 'Server error'));

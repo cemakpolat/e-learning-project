@@ -3,7 +3,8 @@ const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const Course = require('../models/Course');
 const ApiError = require('../utils/apiError');
-const { enrollmentCreateSchema } = require('../validation/modelValidations'); // Import validation schemas
+const ApiSuccess = require('../utils/apiSuccess');
+const { enrollmentCreateSchema } = require('../validation/modelValidations'); 
 
 // Enroll a user in a course
 const enrollUser = async (req, res, next) => {
@@ -51,9 +52,8 @@ const enrollUser = async (req, res, next) => {
 
         // Save the enrollment to the database
         await enrollmentRepository.save(enrollment);
-        console.log('Enrollment created successfully:', enrollment);
 
-        res.status(201).json({ message: 'Enrollment created successfully', enrollment });
+        (new ApiSuccess(201, 'l received created', enrollment, null, null)).send(res);
     } catch (err) {
         console.error('Enrollment error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -64,8 +64,6 @@ const enrollUser = async (req, res, next) => {
 const getEnrollmentsByUser = async (req, res, next) => {
     const { user_id } = req.params;
 
-    console.log('Fetching enrollments for user:', user_id);
-
     try {
         const enrollmentRepository = AppDataSource.getRepository(Enrollment);
 
@@ -75,7 +73,7 @@ const getEnrollmentsByUser = async (req, res, next) => {
             relations: ['course'], // Include course details
         });
 
-        res.status(200).json(enrollments);
+        (new ApiSuccess(200, 'Enrollments received sucessfully', enrollments, null, null)).send(res);
     } catch (err) {
         console.error('Get enrollments by user error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -86,8 +84,6 @@ const getEnrollmentsByUser = async (req, res, next) => {
 const getEnrollmentsByCourse = async (req, res, next) => {
     const { course_id } = req.params;
 
-    console.log('Fetching enrollments for course:', course_id);
-
     try {
         const enrollmentRepository = AppDataSource.getRepository(Enrollment);
 
@@ -96,8 +92,8 @@ const getEnrollmentsByCourse = async (req, res, next) => {
             where: { course_id },
             relations: ['user'], // Include user details
         });
-
-        res.status(200).json(enrollments);
+        
+        (new ApiSuccess(200, 'Enrollments received sucessfully', enrollments, null, null)).send(res);
     } catch (err) {
         console.error('Get enrollments by course error:', err);
         return next(new ApiError(500, 'Server error'));

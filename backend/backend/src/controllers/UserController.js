@@ -3,7 +3,8 @@ const jwt = require("jsonwebtoken");
 const AppDataSource = require('../data-source');
 const User = require("../models/User");
 const ApiError = require('../utils/apiError');
-const { userCreateSchema } = require('../validation/modelValidations'); // Import validation schema
+const ApiSuccess = require('../utils/apiSuccess');
+const { userCreateSchema } = require('../validation/modelValidations'); 
 
 const register = async (req, res, next) => {
     try {
@@ -43,7 +44,8 @@ const register = async (req, res, next) => {
         await userRepository.save(user);
         console.log('User saved successfully:', user);
 
-        res.status(201).json({ message: 'User registered successfully' });
+        // res.status(201).json({ message: 'User registered successfully' });
+        (new ApiSuccess(201, 'User registered successfully',null, null, null)).send(res);
     } catch (err) {
         console.error('Registration error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -82,7 +84,8 @@ const login = async (req, res, next) => {
         );
 
         console.log('Login successful');
-        res.status(200).json({ token });
+        // res.status(200).json({ token });
+        (new ApiSuccess(201, 'User loged in successfully',token, null, null)).send(res);
     } catch (err) {
         console.error('Login error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -94,7 +97,8 @@ const getAllUsers = async (req, res, next) => {
     try {
         const userRepository = AppDataSource.getRepository(User);
         const users = await userRepository.find();
-        res.status(200).json(users);
+        // res.status(200).json(users);
+        (new ApiSuccess(201, 'Users received successfully',users, null, null)).send(res);
     } catch (err) {
         console.error('Get all users error:', err);
         return next(new ApiError(500, 'Server error'));
@@ -112,7 +116,8 @@ const getUserById = async (req, res, next) => {
             return next(new ApiError(404, 'User not found'));
         }
 
-        res.status(200).json(user);
+        // res.status(200).json(user);
+        (new ApiSuccess(201, 'User received successfully',user, null, null)).send(res);
     } catch (err) {
         console.error(err);
         return next(new ApiError(500, 'Server error'));
@@ -138,7 +143,8 @@ const getUserByEmail = async (req, res, next) => {
             return next(new ApiError(400, 'Invalid credentials'));
         }
 
-        res.status(200).json(user);
+        // res.status(200).json(user);
+        (new ApiSuccess(201, 'User received successfully',user, null, null)).send(res);
     } catch (err) {
         console.error('Login error:', err);
         return next(new ApiError(500, 'Server error'));

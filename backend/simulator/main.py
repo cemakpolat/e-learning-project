@@ -1,904 +1,726 @@
 #!/usr/bin/env python3
-import requests
-import random
-import json
-import time
-from datetime import datetime, timedelta
-from faker import Faker
-import logging
-import tenacity
-import os
-import yaml
+"""
+E-Learning Platform Simulator
+A simple simulator that generates user activity for an e-learning platform
+"""
 
-# Initialize Faker for generating realistic data
-fake = Faker()
+import yaml
+import time
+import random
+import requests
+import json
+import logging
+from datetime import datetime
+import threading
+import sys
+import os
+from typing import Dict, List, Any
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("elearning-simulator")
 
-# Load configuration from YAML file
-def load_config(filepath="config.yaml"):
-    """Load configuration settings from a YAML file."""
-    try:
-        with open(filepath, "r") as f:
-            config = yaml.safe_load(f)
-        return config
-    except FileNotFoundError:
-        logging.error(f"Configuration file not found: {filepath}")
-        return {}
-    except yaml.YAMLError as e:
-        logging.error(f"Error parsing configuration file: {e}")
-        return {}
 
-config = load_config()
+class BaseUser:
+    """Base class for all user types with common functionality"""
 
-# API base URL - change to your actual API URL
-BASE_URL = os.environ.get("API_URL", config.get("api_url","http://localhost:3000/api"))
+    def __init__(self, name: str, email: str, password: str, role: str, api_url: str):
+        """Initialize a user with basic information"""
+        self.name = name
+        self.email = email
+        self.password = password
+        self.role = role
+        self.api_url = api_url
+        self.token = None
+        self.user_data = None  # Will store user data returned from API
+        self.last_activity = None
+        self.active = True
+        self.id = None
 
-# Constants for data generation
-NUM_ADMINS = config.get("num_admins", 1)
-NUM_INSTRUCTORS = config.get("num_instructors", 3)
-NUM_STUDENTS = config.get("num_students", 6)
-NUM_COURSES_PER_INSTRUCTOR = config.get("num_courses_per_instructor", 2)
-NUM_CONTENT_ITEMS_PER_COURSE = config.get("num_content_items_per_course", 5)
-COURSE_TOPICS = config.get("course_topics", [
-    "Web Development", "Data Science", "Machine Learning",
-    "Mobile Development", "DevOps", "Cloud Computing"
-])
-CONTENT_TYPES = config.get("content_types", ["video", "pdf", "quiz", "assignment", "text"])
+    def __str__(self):
+        return f"{self.name} ({self.role})"
 
-#User Password
-USER_PASSWORDS = config.get("user_passwords",{
-    "admin" : "admin123",
-    "instructor" : "instructor123",
-    "student" : "student123"
-})
+    def register(self) -> bool:
+        """Register user with the backend"""
+        user_data = {
+            "name": self.name,
+            "email": self.email,
+            "password": self.password,
+            "role": self.role
+        }
 
-# Time between activities (in seconds)
-MIN_DELAY = config.get("min_delay", 1)
-MAX_DELAY = config.get("max_delay", 5)
+        try:
+            response = requests.post(
+                f"{self.api_url}/users/register",
+                json=user_data,
+                timeout=5
+            )
 
-# Store tokens for authentication
-auth_tokens = {}
+            if response.status_code < 400:
+                try:
+                    self.user_data = response.json().get("user")
+                    logger.info(f"Registered user: {self}")
+                    return True
+                except json.JSONDecodeError:
+                    self.user_data = {"name": self.name, "email": self.email}
+                    logger.warning(f"User registration returned non-JSON response for {self}")
+                    return True
+            else:
+                logger.warning(f"Failed to register user {self}: {response.text}")
+                return False
 
-@tenacity.retry(stop=tenacity.stop_after_attempt(3), wait=tenacity.wait_exponential(multiplier=1, min=4, max=10))
-def api_call(method, url, headers=None, json=None):
-    """Generic function to make API calls with retry logic."""
-    try:
-        response = requests.request(method, url, headers=headers, json=json)
-        response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        logging.error(f"API call failed: {e}")
-        return None
+        except requests.RequestException as e:
+            logger.error(f"Error registering user {self}: {e}")
+            return False
 
-def get_user_credentials(role):
-    """Gets the user credentials based on roles"""
-    return USER_PASSWORDS[role]
+    def login(self) -> bool:
+        """Authenticate with the backend to get a token"""
+        login_data = {
+            "email": self.email,
+            "password": self.password
+        }
 
-def create_user(role, i):
-    """Create a single user of a given role."""
-    user_data = {
-        "name": fake.name(),
-        "email": f"{role}{i + 1}@lms.com",
-        "password": get_user_credentials(role),
-        "role": role
-    }
-    return user_data
+        try:
+            response = requests.post(
+                f"{self.api_url}/users/login",
+                json=login_data,
+                timeout=5
+            )
 
-def register_and_login_user(user_data):
-    """Register a user and then log them in to obtain an authentication token."""
-    response = api_call("POST", f"{BASE_URL}/users", json=user_data)
+            if response.status_code < 400:
+                try:
+                    data = response.json()
+                    self.token = data.get("data")
+                    if self.token:
+                        logger.info(f"User logged in: {self}")
+                        return True
+                    else:
+                        logger.warning(f"Login successful but no token received for {self}")
+                        return False
+                except json.JSONDecodeError:
+                    logger.warning(f"Login returned non-JSON response for {self}")
+                    return False
+            else:
+                logger.warning(f"Failed to login user {self}: {response.text}")
+                return False
 
-    if response:
-        user = response
-        logging.info(f"Created {user_data['role']} user: {user['email']}")
+        except requests.RequestException as e:
+            logger.error(f"Error logging in user {self}: {e}")
+            return False
 
-        # Login and store token
-        login_response = api_call("POST", f"{BASE_URL}/users/login", json={
-            "email": user_data["email"],
-            "password": user_data["password"]
-        })
-        if login_response and 'token' in login_response:
-            auth_tokens[user['id']] = login_response['token']
-            return user
+    def make_request(self, method: str, endpoint: str, data: Dict = None) -> Dict:
+        """Make an authenticated API request"""
+        url = f"{self.api_url}/{endpoint}"
+        headers = {'Content-Type': 'application/json'}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+
+        try:
+            if method.lower() == "get":
+                response = requests.get(url, headers=headers, timeout=5)
+            elif method.lower() == "post":
+                response = requests.post(url, json=data, headers=headers, timeout=5)
+            elif method.lower() == "put":
+                response = requests.put(url, json=data, headers=headers, timeout=5)
+            elif method.lower() == "delete":
+                response = requests.delete(url, headers=headers, timeout=5)
+            else:
+                logger.error(f"Unsupported HTTP method: {method}")
+                return {"success": False, "error": "Unsupported HTTP method"}
+
+            # Record activity timestamp
+            self.last_activity = datetime.now()
+
+            if response.status_code >= 400:
+                logger.warning(f"API Error {response.status_code}: {response.text}")
+                return {"success": False, "error": f"HTTP {response.status_code}", "details": response.text}
+
+            if response.content:
+                try:
+                    return response.json()
+                except json.JSONDecodeError:
+                    return {"success": True, "raw": response.text}
+            return {"success": True}
+
+        except requests.RequestException as e:
+            logger.error(f"Request error ({method} {endpoint}): {e}")
+            return {"success": False, "error": str(e)}
+
+    def behave(self, min_delay: int, max_delay: int):
+        """Base behavior loop for all users"""
+        logger.info(f"Starting behavior simulation for {self}")
+        self.set_user_id()
+        while self.active:
+            try:
+                # Perform role-specific behavior (implemented by subclasses)
+                self.perform_action()
+
+                # Random delay between actions
+                delay = random.uniform(min_delay, max_delay)
+                time.sleep(delay)
+
+            except Exception as e:
+                logger.error(f"Error in behavior simulation for {self}: {e}")
+                time.sleep(max_delay)  # Wait a bit longer after an error
+
+    def set_user_id(self):
+        user = self.make_request("get", f"users/email?email={self.email}")
+        self.id = user['data'].get('id')
+
+    def perform_action(self):
+        """To be implemented by subclasses"""
+        pass
+
+    def stop(self):
+        """Stop this user's behavior simulation"""
+        self.active = False
+
+
+class Student(BaseUser):
+    """Student user that enrolls in courses and makes progress"""
+
+    def __init__(self, name: str, email: str, password: str, api_url: str):
+        super().__init__(name, email, password, "student", api_url)
+        self.enrolled_courses = []  # List of course IDs
+
+    def perform_action(self):
+        """Perform a random student action"""
+        # Select a random action
+
+        actions = [
+            self.browse_courses,
+            self.view_enrolled_course,
+            self.make_progress,
+            self.check_notifications
+        ]
+        # Weight actions - make progress more frequent
+        weights = [0.1, 0.1, 0.4, 0.4]
+
+        # Choose and perform an action
+        action = random.choices(actions, weights=weights, k=1)[0]
+        action()
+
+    def browse_courses(self):
+        """Browse available courses, maybe enroll in one"""
+        logger.info(f"Student {self} is browsing courses")
+        courses = self.make_request("get", "courses")
+
+        # Maybe enroll in a course
+        if random.random() < 0.3 and len(courses) > 0:
+            if courses:
+                # Filter out courses already enrolled in
+                available_courses = [c for c in courses if c["id"] not in self.enrolled_courses]
+                if available_courses:
+                    course = random.choice(available_courses)
+                    self.enroll_in_course(course["id"], self.id)
+
+    def enroll_in_course(self, course_id, user_id):
+        """Enroll in a specific course"""
+        enrollment_data = {
+            "course_id": course_id,
+            "user_id": user_id
+        }
+        logger.info(f"Student {self.id} is enrolling in course {course_id}")
+        result = self.make_request("post", "enrollments", enrollment_data)
+
+        if "success" not in result.get("status"):
+            return
+
+        enrollment = result.get("data", [])
+
+        if not enrollment:
+            return
+
+        if "course_id" in enrollment:
+            self.enrolled_courses.append(course_id)
+            logger.info(f"Student {self} enrolled in course {course_id}")
         else:
-            logging.error(f"Failed to login user {user_data['email']}")
-            return None
-    else:
-        logging.error(f"Failed to create {user_data['role']} user")
-        return None
+            logger.warning(f"Failed to enroll student {self} in course {course_id}")
 
-def create_users():
-    """Create admin, instructor, and student users"""
-    users = []
+    def view_enrolled_course(self):
+        """View details of an enrolled course"""
+        if not self.enrolled_courses:
+            # If not enrolled in any courses, browse instead
+            self.browse_courses()
+            return
 
-    # Create admin users
-    for i in range(NUM_ADMINS):
-        user_data = create_user("admin", i)
-        user = register_and_login_user(user_data)
-        if user:
-            users.append(user)
+        course_id = random.choice(self.enrolled_courses)
+        logger.info(f"Student {self} is viewing course {course_id}")
+        self.make_request("get", f"courses/{course_id}")
 
-    # Create instructor users
-    for i in range(NUM_INSTRUCTORS):
-        user_data = create_user("instructor", i)
-        user = register_and_login_user(user_data)
-        if user:
-            users.append(user)
+        # Also view the course contents
+        self.make_request("get", f"course-content/{course_id}")
 
-    # Create student users
-    for i in range(NUM_STUDENTS):
-        user_data = create_user("student", i)
-        user = register_and_login_user(user_data)
-        if user:
-            users.append(user)
-    return users
+    def make_progress(self):
+        """Make progress in an enrolled course"""
+        logger.info(f"Student {self} makes progress")
+        if not self.enrolled_courses:
+            # If not enrolled in any courses, browse instead
+            self.browse_courses()
+            return
 
-def create_courses(users):
-    """Create courses by instructor users"""
-    courses = []
+        course_id = random.choice(self.enrolled_courses)
 
-    instructors = [user for user in users if user["role"] == "instructor"]
+        # Get course contents
+        result = self.make_request("get", f"course-content/{course_id}")
+        if "success" not in result.get("status"):
+            return
 
-    for instructor in instructors:
-        for i in range(NUM_COURSES_PER_INSTRUCTOR):
-            topic = random.choice(COURSE_TOPICS)
-            course_data = {
-                "title": f"{topic}",
-                "description": fake.paragraph(nb_sentences=3),
-                "instructor_id": instructor["id"]  # Add instructor_id
+        contents = result.get("data", [])
+        if not contents:
+            return
+
+        # Choose a random content item
+        content = random.choice(contents)
+        content_id = content["id"]
+
+        # Record progress
+        # time_spent = random.randint(60, 900)  # 1-15 minutes
+        progress_data = {
+            "user_id": self.id,
+            "course_id": course_id,
+            "content_id": content_id
+        }
+
+        logger.info(f"Student {self} is making progress in course {course_id}")
+        self.make_request("post", "progress", progress_data)
+
+    def check_notifications(self):
+        """Check for notifications"""
+        logger.info(f"Student {self} is checking notifications")
+        notifications = self.make_request("get", f"notifications/{self.id}")
+
+
+class Instructor(BaseUser):
+    """Instructor user that creates and manages courses"""
+
+    def __init__(self, name: str, email: str, password: str, api_url: str, course_topics: List[str],
+                 content_types: List[str]):
+        super().__init__(name, email, password, "instructor", api_url)
+        self.course_topics = course_topics
+        self.content_types = content_types
+        self.courses = []  # List of course IDs created by this instructor
+
+    def perform_action(self):
+        """Perform a random instructor action"""
+        # Select a random action
+        actions = [
+            self.create_course,
+            self.check_enrollments,
+            self.add_content,
+            self.update_course,
+            self.send_notification
+        ]
+
+        # Weight actions - creating content and checking progress more frequent
+        weights = [0.1, 0.15, 0.2, 0.25, 0.3]
+
+        # Choose and perform an action
+        action = random.choices(actions, weights=weights, k=1)[0]
+        action()
+
+    def create_course(self):
+        """Create a new course"""
+        topic = random.choice(self.course_topics)
+        difficulty = random.choice(["Beginner", "Intermediate", "Advanced"])
+
+        course_data = {
+            "title": f"{topic} {difficulty} Course",
+            "description": f"Learn {topic} from scratch to expert level. This is a {difficulty.lower()} level course.",
+            "instructor_id": str(self.id)
+        }
+
+        logger.info(f"Instructor {self} is creating a new course")
+        result = self.make_request("post", "courses", course_data)
+
+        if "success" not in result.get("status"):
+            return
+
+        data = result.get("data", [])
+        if result:
+            course_id = data.get("id")
+            self.courses.append(course_id)
+            logger.info(f"Instructor {self} created course {course_id}")
+
+            # Add initial content to the course
+            for i in range(3):  # Add 3 initial content items
+                self.add_content_to_course(course_id, i + 1)
+        else:
+            logger.warning(f"Failed to create course for instructor {self}")
+
+    def add_content_to_course(self, course_id, order):
+        """Add content to a specific course"""
+        content_type = random.choice(self.content_types)
+        content_data = {}
+        if content_type == "video":
+            content_data = {
+                "url": f"https://example.com/video/{course_id}/lesson{order}"
+            }
+        elif content_type == "pdf":
+            content_data = {
+                "url": f"https://example.com/pdf/{course_id}/document{order}.pdf"
+            }
+        else:
+            content_data = {
+                "url": f"https://example.com/img/{course_id}/image{order}.png"
             }
 
-            # Use instructor's token for authorization
-            headers = {"Authorization": f"Bearer {auth_tokens[instructor['id']]}"}
-            response = api_call("POST", f"{BASE_URL}/courses", json=course_data, headers=headers)
-
-            if response:
-                course = response
-                courses.append(course)
-                logging.info(f"Created course: {course['title']} by instructor ID {instructor['id']}")
-            else:
-                logging.error("Failed to create course")
-
-    return courses
-
-def create_course_content(courses):
-    """Create content for each course"""
-    content_items = []
-
-    for course in courses:
-        instructor_id = course["instructor_id"]
-        headers = {"Authorization": f"Bearer {auth_tokens[instructor_id]}"}
-
-        for order in range(1, NUM_CONTENT_ITEMS_PER_COURSE + 1):
-            content_type = random.choice(CONTENT_TYPES)
-            content_data = generate_content_data(content_type)
-
-            content_item_data = {
-                "course_id": course["id"],
-                "type": content_type,
-                "content": content_data,
-                "order": order
-            }
-
-            response = api_call(
-                "POST",
-                f"{BASE_URL}/course-content",
-                json=content_item_data,
-                headers=headers
-            )
-
-            if response:
-                content_item = response
-                content_items.append(content_item)
-                logging.info(f"Created {content_type} content for course ID {course['id']} order {order}")
-            else:
-                logging.error("Failed to create course content")
-
-    return content_items
-
-def generate_content_data(content_type):
-    """Generate content data based on content type."""
-    if content_type == "video":
-        content_data = {
-            "url": f"https://example.com/videos/{fake.uuid4()}",
-            "title": fake.sentence(),
-            "duration": random.randint(300, 1800)  # 5-30 minutes
+        content_item = {
+            "course_id": course_id,
+            "type": content_type,
+            "content": content_data,
+            "order": order
         }
-    elif content_type == "pdf":
-        content_data = {
-            "url": f"https://example.com/pdfs/{fake.uuid4()}.pdf",
-            "title": fake.sentence(),
-            "pages": random.randint(5, 30)
+
+        logger.info(f"Instructor {self} is adding content to course {course_id}")
+        self.make_request("post", f"course-content/", content_item)
+
+    def check_enrollments(self):
+        """Check enrollments for a course"""
+        if not self.courses:
+            self.create_course()
+            return
+
+        course_id = random.choice(self.courses)
+        logger.info(f"Instructor {self} is checking enrollments for course {course_id}")
+        self.make_request("get", f"enrollments/course/{course_id}")
+
+    def add_content(self):
+        """Add new content to an existing course"""
+        if not self.courses:
+            self.create_course()
+            return
+
+        course_id = random.choice(self.courses)
+
+        # Get current content to determine next order
+        result = self.make_request("get", f"course-content/{course_id}")
+
+        if "success" not in result.get("status"):
+            return
+
+        contents = result.get("data", [])
+        next_order = len(contents) + 1
+
+        self.add_content_to_course(course_id, next_order)
+
+    def update_course(self):
+        """Update course details"""
+        if not self.courses:
+            self.create_course()
+            return
+
+        course_id = random.choice(self.courses)
+
+        # Get current course details
+        result = self.make_request("get", f"courses/{course_id}")
+        if "success" not in result.get("status"):
+            return
+
+        course = result['data']
+        if "id" in course:
+            return
+
+        update_data = {
+            "title": course.get("title", f"Course {course_id}"),  # Keep same title
+            "description": course.get("description", "") + f" Updated on {datetime.now().strftime('%Y-%m-%d')}."
         }
-    elif content_type == "quiz":
-        questions = []
-        for _ in range(random.randint(5, 10)):
-            questions.append({
-                "question": fake.sentence(),
-                "options": [fake.word() for _ in range(4)],
-                "correct": random.randint(0, 3)
-            })
-        content_data = {
-            "title": "Quiz: " + fake.sentence(),
-            "questions": questions,
-            "time_limit": random.randint(10, 30)  # minutes
-        }
-    elif content_type == "assignment":
-        content_data = {
-            "title": "Assignment: " + fake.sentence(),
-            "description": fake.paragraph(),
-            "due_days": random.randint(7, 14)
-        }
-    else:  # text
-        content_data = {
-            "title": fake.sentence(),
-            "body": "\n\n".join([fake.paragraph() for _ in range(random.randint(3, 8))])
-        }
-    return content_data
 
-def create_enrollments(users, courses):
-    """Enroll students in courses"""
-    enrollments = []
+        logger.info(f"Instructor {self} is updating course {course_id}")
+        self.make_request("put", f"courses/{course_id}", update_data)
 
-    students = [user for user in users if user["role"] == "student"]
+    def send_notification(self):
+        """Send notification to students in a course"""
+        if not self.courses:
+            self.create_course()
+            return
 
-    for student in students:
-        # Each student enrolls in a random selection of courses
-        num_courses_to_enroll = random.randint(1, len(courses))
-        selected_courses = random.sample(courses, num_courses_to_enroll)
+        course_id = random.choice(self.courses)
 
-        # Use student's token for authorization
-        headers = {"Authorization": f"Bearer {auth_tokens[student['id']]}"}
+        # Get course details for title
+        result = self.make_request("get", f"courses/{course_id}")
+        if "success" not in result.get("status"):
+            return
 
-        for course in selected_courses:
-            enrollment_data = {
-                "course_id": course["id"]
-            }
+        course = result.get("data", {})
+        course_title = course.get("title", f"Course {course_id}")
 
-            response = api_call(
-                "POST",
-                f"{BASE_URL}/enrollments",
-                json=enrollment_data,
-                headers=headers
-            )
+        # Get enrollments to find students
+        enrollments_result = self.make_request("get", f"enrollments/course/{course_id}")
 
-            if response:
-                enrollment = response
-                enrollments.append(enrollment)
-                logging.info(f"Enrolled student ID {student['id']} in course ID {course['id']}")
-            else:
-                logging.error("Failed to create enrollment")
+        if "success" not in enrollments_result.get("status"):
+            return
 
-    return enrollments
+        enrollments = enrollments_result.get('data', [])
+        if not enrollments:
+            return
 
-def update_progress(users, courses, content_items):
-    """Update progress for students"""
-    students = [user for user in users if user["role"] == "student"]
+        message_templates = [
+            f"Don't forget to complete the latest module in {course_title}!",
+            f"New live session for {course_title} scheduled next week!",
+            f"Office hours available for {course_title} students tomorrow.",
+            f"Important deadline approaching for {course_title} assignment!"
+        ]
 
-    for student in students:
-        # Use student's token for authorization
-        headers = {"Authorization": f"Bearer {auth_tokens[student['id']]}"}
+        message = random.choice(message_templates)
 
-        # Get student enrollments
-        enrollments = get_student_enrollments(student, headers)
-
+        # Send notification to each enrolled student
         for enrollment in enrollments:
-            course_id = enrollment["course_id"]
-
-            # Get content for this course
-            course_content = get_course_content(course_id, headers)
-
-            # Sort by order
-            course_content.sort(key=lambda x: x["order"])
-
-            # Decide how far the student has progressed (0-100%)
-            progress_percentage = random.randint(0, 100)
-
-            # Calculate how many content items to mark as viewed
-            items_to_progress = int(len(course_content) * progress_percentage / 100)
-
-            for i in range(items_to_progress):
-                content_id = course_content[i]["id"]
-
-                # Random time spent between 5 minutes and 1 hour (in seconds)
-                time_spent = random.randint(300, 3600)
-
-                progress_data = {
-                    "course_id": course_id,
-                    "content_id": content_id,
-                    "time_spent": time_spent
-                }
-
-                response = api_call(
-                    "POST",
-                    f"{BASE_URL}/progress",
-                    json=progress_data,
-                    headers=headers
-                )
-
-                if response:
-                    logging.info(f"Updated progress for student {student['id']} on content {content_id}")
-                else:
-                    logging.error("Failed to update progress")
-
-                # Add a small delay to simulate real user behavior
-                time.sleep(0.1)
-
-def get_student_enrollments(student, headers):
-    """Get enrollments for a student."""
-    enrollment_response = api_call(
-        "GET",
-        f"{BASE_URL}/enrollments/user/{student['id']}",
-        headers=headers
-    )
-    if enrollment_response:
-        return enrollment_response
-    else:
-        logging.error(f"Failed to get enrollments for student {student['id']}")
-        return []
-
-def get_course_content(course_id, headers):
-    """Get content for a course."""
-    course_content_response = api_call(
-        "GET",
-        f"{BASE_URL}/course-content/course/{course_id}",
-        headers=headers
-    )
-    if course_content_response:
-        return course_content_response
-    else:
-        logging.error(f"Failed to get content for course {course_id}")
-        return []
-
-def create_notifications():
-    """Create system notifications for users"""
-    # Get all users
-    admin_token = list(auth_tokens.values())[0] if auth_tokens else None
-
-    if not admin_token:
-        logging.error("No admin token available to create notifications.")
-        return
-
-    headers = {"Authorization": f"Bearer {admin_token}"}
-
-    users = get_all_users(headers)
-    if not users:
-        return
-
-    # As admin, create notifications for each user
-    notification_templates = [
-        "Welcome to our learning platform!",
-        "Your course has been updated with new content",
-        "Don't forget to complete your assignments",
-        "You've earned a certificate!",
-        "A new course that matches your interests is available"
-    ]
-
-    for user in users:
-        # Create 1-3 notifications per user
-        for _ in range(random.randint(1, 3)):
             notification_data = {
-                "user_id": user["id"],
-                "message": random.choice(notification_templates)
+                "user_id": enrollment.get("user_id"),
+                "message": message
             }
 
-            response = api_call(
-                "POST",
-                f"{BASE_URL}/notifications",
-                json=notification_data,
-                headers=headers
+            logger.info(f"Instructor {self} is sending notification to student in course {course_id}")
+            self.make_request("post", "notifications", notification_data)
+
+
+class Admin(BaseUser):
+    """Admin user that monitors the platform"""
+
+    def __init__(self, name: str, email: str, password: str, api_url: str):
+        super().__init__(name, email, password, "admin", api_url)
+
+    def perform_action(self):
+        """Perform a random admin action"""
+        # Select a random action
+        actions = [
+            self.view_all_users,
+            self.view_all_courses,
+            self.check_course_metrics
+        ]
+
+        # Equal weights for admin actions
+        weights = [0.33, 0.33, 0.34]
+
+        # Choose and perform an action
+        action = random.choices(actions, weights=weights, k=1)[0]
+        action()
+
+    def view_all_users(self):
+        """View list of all users"""
+        logger.info(f"Admin {self} is viewing all users")
+        self.make_request("get", "users")
+
+    def view_all_courses(self):
+        """View list of all courses"""
+        logger.info(f"Admin {self} is viewing all courses")
+        self.make_request("get", "courses")
+
+    def check_course_metrics(self):
+        """Check metrics for a specific course"""
+        # First get all courses
+        courses_result = self.make_request("get", "courses")
+        if not courses_result.get("success", False):
+            return
+
+        courses = courses_result
+        if not courses:
+            return
+
+
+class ELearningSimulator:
+    """Main simulator class that manages all users and activities"""
+
+    def __init__(self, config_path: str = "config.yaml"):
+        """Initialize the simulator with configuration"""
+        self.config = self._load_config(config_path)
+        self.api_url = self.config["api_url"]
+
+        # User lists
+        self.admins = []
+        self.instructors = []
+        self.students = []
+
+        # Activity tracking
+        self.active = True
+        self.threads = {}
+
+    def _load_config(self, config_path: str) -> Dict[str, Any]:
+        """Load configuration from YAML file"""
+        try:
+            with open(config_path, 'r') as file:
+                config = yaml.safe_load(file)
+                logger.info(f"Loaded configuration from {config_path}")
+                return config
+        except Exception as e:
+            logger.error(f"Failed to load config from {config_path}: {e}")
+            logger.info("Using default configuration")
+            # Default configuration
+            return {
+                "api_url": "http://localhost:3000/api",
+                "num_admins": 1,
+                "num_instructors": 3,
+                "num_students": 6,
+                "course_topics": ["Web Development", "Data Science", "Machine Learning"],
+                "content_types": ["video", "pdf", "quiz"],
+                "user_passwords": {
+                    "admin": "admin123",
+                    "instructor": "instructor123",
+                    "student": "student123"
+                },
+                "min_delay": 3,
+                "max_delay": 8
+            }
+
+    def create_users(self):
+        """Create all users based on configuration"""
+        logger.info("Creating simulated users...")
+
+        # Create admin users
+        for i in range(self.config["num_admins"]):
+            admin = Admin(
+                name=f"Admin {i + 1}",
+                email=f"admin{i + 1}@example.com",
+                password=self.config["user_passwords"]["admin"],
+                api_url=self.api_url
             )
+            self.admins.append(admin)
 
-            if response:
-                logging.info(f"Created notification for user {user['id']}")
-            else:
-                logging.error("Failed to create notification")
-
-def get_all_users(headers):
-    """Gets all user in the system"""
-    users_response = api_call("GET", f"{BASE_URL}/users", headers=headers)
-
-    if users_response:
-        return users_response
-    else:
-        logging.error("Failed to get users")
-        return None
-
-def simulate_student_activity(user,headers):
-    """simulate student activities"""
-    student_activities = [
-                        "view_courses",
-                        "view_content",
-                        "update_progress",
-                        "search_courses"
-                    ]
-
-                    # Perform 1-3 random activities
-    for _ in range(random.randint(1, 3)):
-        activity = random.choice(student_activities)
-
-        if activity == "view_courses":
-            # View enrolled courses
-            enrollments_response = api_call(
-                "GET",
-                f"{BASE_URL}/enrollments/user/{user['id']}",
-                headers=headers
+        # Create instructor users
+        for i in range(self.config["num_instructors"]):
+            instructor = Instructor(
+                name=f"Instructor {i + 1}",
+                email=f"instructor{i + 1}@example.com",
+                password=self.config["user_passwords"]["instructor"],
+                api_url=self.api_url,
+                course_topics=self.config["course_topics"],
+                content_types=self.config["content_types"]
             )
+            self.instructors.append(instructor)
 
-            if enrollments_response:
-                enrollments = enrollments_response
-                logging.info(f"Student {user['id']} viewed their {len(enrollments)} courses")
-
-        elif activity == "view_content" or activity == "update_progress":
-            # View enrolled courses first
-            enrollments_response = api_call(
-                "GET",
-                f"{BASE_URL}/enrollments/user/{user['id']}",
-                headers=headers
+        # Create student users
+        for i in range(self.config["num_students"]):
+            student = Student(
+                name=f"Student {i + 1}",
+                email=f"student{i + 1}@example.com",
+                password=self.config["user_passwords"]["student"],
+                api_url=self.api_url
             )
+            self.students.append(student)
 
-            if enrollments_response:
-                enrollments = enrollments_response
+        logger.info(
+            f"Created {len(self.admins)} admins, {len(self.instructors)} instructors, and {len(self.students)} students")
 
-                if enrollments:
-                    # Pick a random course
-                    course = random.choice(enrollments)
-                    course_response = api_call(
-                        "GET",
-                        f"{BASE_URL}/courses/{course['course_id']}",
-                        headers=headers
-                    )
+    def setup_users(self):
+        """Register and login all users"""
+        all_users = self.admins + self.instructors + self.students
 
-                    if course_response:
-                        logging.info(f"Student {user['id']} viewed course {course['course_id']}")
+        # Register users
+        logger.info("Registering users...")
+        for user in all_users:
+            user.register()
 
-                    # View content for this course
-                    content_response = api_call(
-                        "GET",
-                        f"{BASE_URL}/course-content/course/{course['course_id']}",
-                        headers=headers
-                    )
+        # Login users
+        logger.info("Logging in users...")
+        for user in all_users:
+            user.login()
 
-                    if content_response:
-                        content_items = content_response
+    def start_simulation(self):
+        """Start the simulation with all users"""
+        logger.info("Starting simulation...")
+        self.active = True
 
-                        if content_items:
-                            # Pick a random content item
-                            content = random.choice(content_items)
+        min_delay = self.config["min_delay"]
+        max_delay = self.config["max_delay"]
 
-                            # View content
-                            api_call(
-                                "GET",
-                                f"{BASE_URL}/course-content/{content['id']}",
-                                headers=headers
-                            )
-                            logging.info(f"Student {user['id']} viewed content {content['id']}")
-
-                            # Update progress (50% chance if viewing content)
-                            if activity == "update_progress" or random.random() < 0.5:
-                                # Simulate spending 5-30 minutes on the content
-                                time_spent = random.randint(300, 1800)
-
-                                progress_data = {
-                                    "course_id": course["course_id"],
-                                    "content_id": content["id"],
-                                    "time_spent": time_spent
-                                }
-
-                                progress_response = api_call(
-                                    "POST",
-                                    f"{BASE_URL}/progress",
-                                    json=progress_data,
-                                    headers=headers
-                                )
-
-                                if progress_response:
-                                    logging.info(
-                                        f"Student {user['id']} updated progress on content {content['id']} (+{time_spent}s)")
-
-        elif activity == "search_courses":
-            # Search for courses to enroll in
-            search_terms = ["Web", "Data", "Programming", "Design", "Cloud"]
-            term = random.choice(search_terms)
-
-            search_response = api_call(
-                "GET",
-                f"{BASE_URL}/courses/search?q={term}",
-                headers=headers
+        # Start threads for each user
+        all_users = self.admins + self.instructors + self.students
+        for user in all_users:
+            thread = threading.Thread(
+                target=user.behave,
+                args=(min_delay, max_delay),
+                daemon=True,
+                name=f"{user.role}-{user.name}"
             )
+            self.threads[user.name] = thread
+            thread.start()
 
-            if search_response:
-                search_results = search_response
-                logging.info(
-                    f"Student {user['id']} searched for '{term}' courses, found {len(search_results)}")
-
-                # 10% chance to enroll in a new course if found
-                if search_results and random.random() < 0.1:
-                    # Check if already enrolled
-                    enrollments_response = api_call(
-                        "GET",
-                        f"{BASE_URL}/enrollments/user/{user['id']}",
-                        headers=headers
-                    )
-
-                    if enrollments_response:
-                        enrollments = enrollments_response
-                        enrolled_course_ids = [e["course_id"] for e in enrollments]
-
-                        # Filter courses not already enrolled in
-                        available_courses = [c for c in search_results if
-                                                c["id"] not in enrolled_course_ids]
-
-                        if available_courses:
-                            course_to_enroll = random.choice(available_courses)
-
-                            enrollment_data = {
-                                "course_id": course_to_enroll["id"]
-                            }
-
-                            enrollment_response = api_call(
-                                "POST",
-                                f"{BASE_URL}/enrollments",
-                                json=enrollment_data,
-                                headers=headers
-                            )
-
-                            if enrollment_response:
-                                logging.info(
-                                    f"Student {user['id']} enrolled in new course {course_to_enroll['id']}")
-
-def simulate_instructor_activity(user,headers):
-    """simulate instructor activities"""
-    instructor_activities = [
-        "view_courses",
-        "view_analytics",
-        "create_content",
-        "view_enrollments"
-    ]
-
-    # Perform 1-2 random activities
-    for _ in range(random.randint(1, 2)):
-        activity = random.choice(instructor_activities)
-
-        # First get instructor's courses for most activities
-        courses_response = api_call(
-            "GET",
-            f"{BASE_URL}/courses/instructor/{user['id']}",
-            headers=headers
+        # Start a summary thread
+        summary_thread = threading.Thread(
+            target=self._print_summary,
+            daemon=True,
+            name="summary"
         )
+        self.threads["summary"] = summary_thread
+        summary_thread.start()
+
+        logger.info("Simulation running...")
+
+    def _print_summary(self):
+        """Print a summary of activity periodically"""
+        while self.active:
+            time.sleep(60)  # Every minute
+            all_users = self.admins + self.instructors + self.students
+
+            active_users = sum(1 for user in all_users if user.last_activity is not None)
+
+            logger.info(f"--- ACTIVITY SUMMARY ---")
+            logger.info(f"Active users: {active_users}/{len(all_users)}")
+            logger.info(f"- Admins: {sum(1 for u in self.admins if u.last_activity is not None)}/{len(self.admins)}")
+            logger.info(
+                f"- Instructors: {sum(1 for u in self.instructors if u.last_activity is not None)}/{len(self.instructors)}")
+            logger.info(
+                f"- Students: {sum(1 for u in self.students if u.last_activity is not None)}/{len(self.students)}")
+            logger.info(f"-----------------------")
+
+    def stop_simulation(self):
+        """Stop the simulation"""
+        logger.info("Stopping simulation...")
+        self.active = False
+
+        # Stop all user behaviors
+        all_users = self.admins + self.instructors + self.students
+        for user in all_users:
+            user.stop()
+
+        # Wait for threads to finish
+        for name, thread in self.threads.items():
+            if thread.is_alive():
+                logger.info(f"Waiting for thread {name} to finish...")
+                thread.join(timeout=2)
+
+        logger.info("Simulation stopped")
 
-        if courses_response and courses_response:
-            courses = courses_response
-
-            if activity == "view_courses":
-                logging.info(f"Instructor {user['id']} viewed their {len(courses)} courses")
-
-            elif activity == "view_analytics":
-                # Pick a random course
-                course = random.choice(courses)
-
-                analytics_response = api_call(
-                    "GET",
-                    f"{BASE_URL}/analytics/course/{course['id']}",
-                    headers=headers
-                )
-
-                if analytics_response:
-                    logging.info(f"Instructor {user['id']} viewed analytics for course {course['id']}")
-
-            elif activity == "create_content":
-                # 20% chance to create new content
-                if random.random() < 0.2:
-                    course = random.choice(courses)
-
-                    # Get current content to determine next order
-                    content_response = api_call(
-                        "GET",
-                        f"{BASE_URL}/course-content/course/{course['id']}",
-                        headers=headers
-                    )
-
-                    if content_response:
-                        existing_content = content_response
-                        next_order = len(existing_content) + 1
-
-                        content_type = random.choice(CONTENT_TYPES)
-                        content_data = generate_content_data(content_type)
-
-                        content_item_data = {
-                            "course_id": course["id"],
-                            "type": content_type,
-                            "content": content_data,
-                            "order": next_order
-                        }
-
-                        content_response = api_call(
-                            "POST",
-                            f"{BASE_URL}/course-content",
-                            json=content_item_data,
-                            headers=headers
-                        )
-
-                        if content_response:
-                            logging.info(
-                                f"Instructor {user['id']} created new {content_type} content for course {course['id']}")
-
-                            # Create notifications for enrolled students
-                            enrollments_response = api_call(
-                                "GET",
-                                f"{BASE_URL}/enrollments/course/{course['id']}",
-                                headers=headers
-                            )
-
-                            if enrollments_response:
-                                enrollments = enrollments_response
-
-                                for enrollment in enrollments:
-                                    notification_data = {
-                                        "user_id": enrollment["user_id"],
-                                        "message": f"New content added to course: {course['title']}"
-                                    }
-
-                                    api_call(
-                                        "POST",
-                                        f"{BASE_URL}/notifications",
-                                        json=notification_data,
-                                        headers=headers
-                                    )
-
-            elif activity == "view_enrollments":
-                course = random.choice(courses)
-
-                enrollments_response = api_call(
-                    "GET",
-                    f"{BASE_URL}/enrollments/course/{course['id']}",
-                    headers=headers
-                )
-
-                if enrollments_response:
-                    enrollments = enrollments_response
-                    logging.info(
-                        f"Instructor {user['id']} viewed {len(enrollments)} enrollments for course {course['id']}")
-
-def simulate_admin_activity(user,headers):
-    """simulate admin activities"""
-    admin_activities = [
-        "view_users",
-        "view_courses",
-        "view_system_analytics",
-        "send_notifications"
-    ]
-
-    # Perform 1-2 random activities
-    for _ in range(random.randint(1, 2)):
-        activity = random.choice(admin_activities)
-
-        if activity == "view_users":
-            users_response = api_call("GET", f"{BASE_URL}/users", headers=headers)
-
-            if users_response:
-                all_users = users_response
-                logging.info(f"Admin {user['id']} viewed all {len(all_users)} users")
-
-        elif activity == "view_courses":
-            courses_response = api_call("GET", f"{BASE_URL}/courses", headers=headers)
-
-            if courses_response:
-                all_courses = courses_response
-                logging.info(f"Admin {user['id']} viewed all {len(all_courses)} courses")
-
-        elif activity == "view_system_analytics":
-            analytics_response = api_call("GET", f"{BASE_URL}/analytics", headers=headers)
-
-            if analytics_response:
-                logging.info(f"Admin {user['id']} viewed system analytics")
-
-        elif activity == "send_notifications":
-            # 10% chance to send a system-wide notification
-            if random.random() < 0.1:
-                notification_templates = [
-                    "System maintenance scheduled for this weekend",
-                    "New courses are now available",
-                    "Check out our updated user interface",
-                    "Complete your profile to unlock additional features"
-                ]
-
-                message = random.choice(notification_templates)
-
-                all_users = get_all_users(headers)
-
-                if all_users:
-                    # Send to all users
-                    for target_user in all_users:
-                        notification_data = {
-                            "user_id": target_user["id"],
-                            "message": message
-                        }
-
-                        api_call(
-                            "POST",
-                            f"{BASE_URL}/notifications",
-                            json=notification_data,
-                            headers=headers
-                        )
-
-                    logging.info(f"Admin {user['id']} sent system notification to all users")
-
-def simulate_continuous_activity():
-    """Continuously simulate real-time user activity"""
-    logging.info("\n=== Starting Continuous User Activity Simulation ===")
-    logging.info("Press Ctrl+C to stop the simulation")
-
-    # Load all users only once
-    admin_token = list(auth_tokens.values())[0] if auth_tokens else None
-    if not admin_token:
-        logging.error("No admin token available. Simulation cannot continue.")
-        return
-
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    all_users = get_all_users(headers)
-
-    if not all_users:
-        return
-
-    # Track session times for users
-    user_sessions = {}
-
-    # Track user login status
-    logged_in_users = set(user["id"] for user in all_users)  # Start with all users logged in
-
-    # Simulation loop
-    session_id = 1
-    try:
-        while True:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            logging.info(f"\n[{current_time}] Session {session_id}")
-
-            # Determine which users are active in this session
-            active_users = [user for user in all_users if user["id"] in logged_in_users and random.random() > 0.1]
-
-            if not active_users:
-                logging.info("No active users this session")
-                time.sleep(random.uniform(MIN_DELAY, MAX_DELAY))
-                session_id += 1
-                continue
-
-            logging.info(f"Active users: {len(active_users)}")
-
-            # Process activity for each active user
-            for user in active_users:
-                headers = {"Authorization": f"Bearer {auth_tokens[user['id']]}"}
-
-                # All users check dashboard and notifications
-                dashboard_response = api_call("GET", f"{BASE_URL}/dashboard", headers=headers)
-                if dashboard_response:
-                    logging.info(f"User {user['id']} viewed dashboard")
-
-                notification_response = api_call("GET", f"{BASE_URL}/notifications/user/{user['id']}", headers=headers)
-                if notification_response:
-                    notifications = notification_response
-                    unread = [n for n in notifications if not n.get('is_read', False)]
-                    if unread:
-                        # Mark a random notification as read
-                        notification = random.choice(unread)
-                        api_call(
-                            "PUT",
-                            f"{BASE_URL}/notifications/{notification['id']}/read",
-                            headers=headers
-                        )
-                        logging.info(f"User {user['id']} read notification {notification['id']}")
-
-                # Role-specific activities
-                if user["role"] == "student":
-                    simulate_student_activity(user,headers)
-                elif user["role"] == "instructor":
-                    simulate_instructor_activity(user,headers)
-                elif user["role"] == "admin":
-                    simulate_admin_activity(user,headers)
-
-                # Small delay between user activities
-                time.sleep(random.uniform(0.5, 1.5))
-
-            # Delay between sessions
-            delay = random.uniform(MIN_DELAY, MAX_DELAY)
-            logging.info(f"Waiting {delay:.2f} seconds until next session...")
-            time.sleep(delay)
-            session_id += 1
-
-    except KeyboardInterrupt:
-        logging.info("\n=== Simulation stopped by user ===")
-    except Exception as e:
-        logging.error(f"\n=== Simulation error: {str(e)} ===")
-
-def setup_initial_data():
-    """Sets up the initial data for the simulation."""
-    logging.info("\n=== Creating Users ===")
-    users = create_users()
-
-    logging.info("\n=== Creating Courses ===")
-    courses = create_courses(users)
-
-    logging.info("\n=== Creating Course Content ===")
-    content_items = create_course_content(courses)
-
-    logging.info("\n=== Creating Enrollments ===")
-    enrollments = create_enrollments(users, courses)
-
-    logging.info("\n=== Creating Initial Progress ===")
-    update_progress(users, courses, content_items)
-
-    logging.info("\n=== Creating Notifications ===")
-    create_notifications()
-
-    logging.info("\nInitial data setup completed successfully!")
-    return users
-
-def load_existing_data():
-    """Loads existing users and their tokens for continuous simulation."""
-    logging.info("\n=== Loading existing users ===")
-
-    # Get all existing users and their authentication tokens
-    admin_credentials = {
-        "email": config.get("admin_email", "admin1@lms.com"),  # Get admin email from config
-        "password": get_user_credentials("admin")
-    }
-
-    # Login as admin to get token
-    login_response = api_call("POST", f"{BASE_URL}/users/login", json=admin_credentials)
-    if not login_response or 'token' not in login_response:
-        logging.error("Failed to authenticate as admin. Please check credentials.")
-        return None
-
-    admin_token = login_response['token']
-
-    # Get all users
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    users = get_all_users(headers)
-
-    if not users:
-        logging.error("Failed to get users. Please initialize data first.")
-        return None
-
-    logging.info(f"Loaded {len(users)} existing users")
-
-    # Get tokens for all users
-    for user in users:
-        user_credentials = {
-            "email": user['email'],
-            "password": get_user_credentials(user["role"])
-        }
-
-        login_response = api_call("POST", f"{BASE_URL}/users/login", json=user_credentials)
-        if login_response and 'token' in login_response:
-            auth_tokens[user['id']] = login_response['token']
-            logging.info(f"Authenticated as {user['email']}")
-        else:
-            logging.warning(f"Failed to authenticate as {user['email']}")
-
-    return users
 
 def main():
-    """Main function to run the data generation and continuous simulation"""
-    logging.info("=== LMS Simulation Tool ===")
-    logging.info("1. Initialize data (first-time setup)")
-    logging.info("2. Start continuous simulation")
-    choice = input("Enter your choice (1/2): ")
+    """Main function to run the simulator"""
+    try:
+        logger.info("Starting E-Learning Platform Simulator")
 
-    if choice == "1":
-        users = setup_initial_data()
+        # Read config path from command line
+        config_path = "config.yaml"
+        if len(sys.argv) > 1:
+            config_path = sys.argv[1]
 
-        run_simulation = input("Start continuous simulation now? (y/n): ")
-        if run_simulation.lower() == 'y':
-            simulate_continuous_activity()
+        # Initialize and run simulator
+        simulator = ELearningSimulator(config_path)
 
-    elif choice == "2":
-        if load_existing_data():
-            simulate_continuous_activity()
+        # Create and setup users
+        simulator.create_users()
+        simulator.setup_users()
 
-    else:
-        logging.warning("Invalid choice. Exiting.")
+        # Start simulation
+        simulator.start_simulation()
+
+        # Keep the main thread running until interrupted
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, stopping simulation...")
+            simulator.stop_simulation()
+
+    except Exception as e:
+        logger.error(f"Error in main function: {e}")
+        return 1
+
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -4,7 +4,9 @@ const CourseContent = require('../models/CourseContent');
 const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
 const ApiError = require('../utils/apiError');
-const { progressCreateSchema } = require('../validation/modelValidations'); // Import validation schema
+const ApiSuccess = require('../utils/apiSuccess');
+
+const { progressCreateSchema } = require('../validation/modelValidations'); 
 const { MoreThanOrEqual } = require('typeorm');
 
 // Mark content as completed
@@ -42,7 +44,7 @@ const markContentCompleted = async (req, res, next) => {
     await progressRepository.save(progress);
     console.log('Progress created successfully:', progress);
 
-    res.status(201).json({ message: 'Content marked as completed', progress });
+    (new ApiSuccess(201, 'Content marked as completed', progress, null, null)).send(res);
   } catch (err) {
     console.error('Mark content as completed error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -64,7 +66,7 @@ const getProgress = async (req, res, next) => {
       relations: ['content'], // Include content details
     });
 
-    res.status(200).json(progress);
+    (new ApiSuccess(201, 'Content progress is received', progress, null, null)).send(res);
   } catch (err) {
     console.error('Get progress error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -88,7 +90,8 @@ const getCourseTimeAnalytics = async (req, res, next) => {
     const totalTimeSpent = progress.reduce((sum, entry) => sum + entry.time_spent, 0);
     const averageTimeSpent = progress.length > 0 ? totalTimeSpent / progress.length : 0;
 
-    res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    // res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    (new ApiSuccess(201, 'Time analytics is received', { totalTimeSpent, averageTimeSpent }, null, null)).send(res);
   } catch (err) {
     console.error('Get course time analytics error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -117,7 +120,8 @@ const getCourseCompletionPercentage = async (req, res, next) => {
       ? Math.round((completedContent / totalContent) * 100)
       : 0;
 
-    res.status(200).json({ completionPercentage });
+    //res.status(200).json({ completionPercentage });
+    (new ApiSuccess(201, 'Completion percentage is received', completionPercentage, null, null)).send(res);
   } catch (err) {
     console.error('Get completion percentage error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -141,7 +145,8 @@ const getCourseAnalytics = async (req, res, next) => {
     const totalTimeSpent = progress.reduce((sum, entry) => sum + entry.time_spent, 0);
     const averageTimeSpent = progress.length > 0 ? totalTimeSpent / progress.length : 0;
 
-    res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    // res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    (new ApiSuccess(201, 'Course analytics is received', { totalTimeSpent, averageTimeSpent }, null, null)).send(res);
   } catch (err) {
     console.error('Get course analytics error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -179,6 +184,7 @@ const getCourseCompletionRate = async (req, res, next) => {
       : 0;
 
     res.status(200).json({ completionRate });
+    (new ApiSuccess(201, 'Completion rate is received',completionRate, null, null)).send(res);
   } catch (err) {
     console.error('Get course completion rate error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -198,7 +204,8 @@ const getPopularCourses = async (req, res, next) => {
       .limit(5) // Top 5 popular courses
       .getRawMany();
 
-    res.status(200).json(popularCourses);
+    // res.status(200).json(popularCourses);
+    (new ApiSuccess(201, 'Popular courses are received',popularCourses, null, null)).send(res);
   } catch (err) {
     console.error('Get popular courses error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -225,7 +232,8 @@ const getUserEngagement = async (req, res, next) => {
     // Calculate average interactions per user
     const interactionsPerUser = recentProgress.length / activeUsers;
 
-    res.status(200).json({ activeUsers, interactionsPerUser });
+    //res.status(200).json({ activeUsers, interactionsPerUser });
+    (new ApiSuccess(201, 'User engagements are received',{ activeUsers, interactionsPerUser }, null, null)).send(res);
   } catch (err) {
     console.error('Get user engagement error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -277,7 +285,8 @@ const getRetentionRates = async (req, res, next) => {
     const totalUsers = filteredRetentionRates.length;
     const retentionRate = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
 
-    res.status(200).json({ retentionRate, userRetention: filteredRetentionRates });
+    // res.status(200).json({ retentionRate, userRetention: filteredRetentionRates });
+    (new ApiSuccess(201, 'Retention rates are received',{ retentionRate, userRetention: filteredRetentionRates }, null, null)).send(res);
   } catch (err) {
     console.error('Get retention rates error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -311,7 +320,8 @@ const getContentPopularity = async (req, res, next) => {
     // Sort by interactions (descending)
     popularityArray.sort((a, b) => b.interactions - a.interactions);
 
-    res.status(200).json(popularityArray);
+    // res.status(200).json(popularityArray);
+    (new ApiSuccess(200, 'Popularity content is received',popularityArray, null, null)).send(res);
   } catch (err) {
     console.error('Get content popularity error:', err);
     return next(new ApiError(500, 'Server error'));
@@ -339,7 +349,8 @@ const getUserProgressOverTime = async (req, res, next) => {
       time_spent: entry.time_spent,
     }));
 
-    res.status(200).json(timeline);
+    // res.status(200).json(timeline);
+    (new ApiSuccess(200, 'User progress over time is received',timeline, null, null)).send(res);
   } catch (err) {
     console.error('Get user progress over time error:', err);
     return next(new ApiError(500, 'Server error'));
