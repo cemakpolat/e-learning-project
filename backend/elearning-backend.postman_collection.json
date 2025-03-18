@@ -1,0 +1,370 @@
+{
+	"info": {
+		"_postman_id": "9e3618a1-69f0-4609-9a0e-660664e5b565",
+		"name": "udemylike-nodejs",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "2445897"
+	},
+	"item": [
+		{
+			"name": "use register",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"name\": \"Cem Doe\",\n  \"email\": \"cem@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"student\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/users/register"
+			},
+			"response": []
+		},
+		{
+			"name": "user login",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"akpolatcem@gmail.com\",\n  \"password\": \"password123\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/users/login"
+			},
+			"response": []
+		},
+		{
+			"name": "add course",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Introduction to Node.js\",\n  \"description\": \"Learn the basics of Node.js\",\n  \"instructor_id\": 5\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/courses"
+			},
+			"response": []
+		},
+		{
+			"name": "get courses",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/courses"
+			},
+			"response": []
+		},
+		{
+			"name": "update course",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "PUT",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Advanced Node.js 2\",\n  \"description\": \"Learn advanced concepts in Node.js\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/courses/2"
+			},
+			"response": []
+		},
+		{
+			"name": "delete course",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "DELETE",
+				"header": [],
+				"url": "http://localhost:3000/api/courses/1"
+			},
+			"response": []
+		},
+		{
+			"name": "create enrollment",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"user_id\": 4,\n  \"course_id\": 2\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/enrollments"
+			},
+			"response": []
+		},
+		{
+			"name": "get enrollment by user",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/enrollments/user/3"
+			},
+			"response": []
+		},
+		{
+			"name": "get enrollment by course",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/enrollments/course/2"
+			},
+			"response": []
+		},
+		{
+			"name": "update progress",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"user_id\": 4,\n  \"course_id\": 2,\n  \"content_id\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/progress"
+			},
+			"response": []
+		},
+		{
+			"name": "create course content",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"course_id\": 2,\n  \"type\": \"video\",\n  \"content\": { \"url\": \"https://example.com/video1\" },\n  \"order\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/course-content"
+			},
+			"response": []
+		},
+		{
+			"name": "get course content",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/course-content/1"
+			},
+			"response": []
+		},
+		{
+			"name": "get progress",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/progress/4/2"
+			},
+			"response": []
+		},
+		{
+			"name": "get progress completion",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/progress/completion/4/2"
+			},
+			"response": []
+		},
+		{
+			"name": "dashboard",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/dashboard/1"
+			},
+			"response": []
+		},
+		{
+			"name": "get notifications",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/notifications/3"
+			},
+			"response": []
+		},
+		{
+			"name": "send Email notitification",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"user_id\": 4,\n  \"message\": \"New content added to your course!\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:3000/api/notifications"
+			},
+			"response": []
+		},
+		{
+			"name": "get time analytics",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/time/1"
+			},
+			"response": []
+		},
+		{
+			"name": "get completion rate",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/completion-rate/1"
+			},
+			"response": []
+		},
+		{
+			"name": "get popular courses",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/popular"
+			},
+			"response": []
+		},
+		{
+			"name": "get Content Popularity",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/content-popularity/1"
+			},
+			"response": []
+		},
+		{
+			"name": "retention rates",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/retention"
+			},
+			"response": []
+		},
+		{
+			"name": "user engagement metrics",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/engagement"
+			},
+			"response": []
+		},
+		{
+			"name": "user progres over time",
+			"request": {
+				"auth": {
+					"type": "noauth"
+				},
+				"method": "GET",
+				"header": [],
+				"url": "http://localhost:3000/api/analytics/progress-over-time/3/1"
+			},
+			"response": []
+		}
+	]
+}
