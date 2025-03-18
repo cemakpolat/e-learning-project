@@ -6,6 +6,7 @@ const {
     updateCourse,
     deleteCourse,
     getFeaturedCourses,
+    getUsersByCourse,
 } = require('../controllers/CourseController');
 
 const authMiddleware = require('../middleware/auth');
@@ -25,7 +26,7 @@ router.get('/featured', authMiddleware, roleMiddleware(['admin', 'instructor','s
 router.get('/',  authMiddleware, roleMiddleware(['admin', 'instructor', 'student']), getAllCourses);
 
 // Get a single course by ID
-router.get('/:id', getCourseById);
+router.get('/:id', authMiddleware, roleMiddleware(['admin', 'instructor', 'student']), getCourseById);
 
 // Update a course
 router.put('/:id', authMiddleware, roleMiddleware(['admin', 'instructor']), updateCourse);

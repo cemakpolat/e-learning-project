@@ -12,6 +12,6 @@ const router = express.Router();
 router.post('/', authMiddleware, roleMiddleware(['admin', 'instructor']), sendNotification);
 
 // Get all notifications for a user
-router.get('/:user_id', authMiddleware, roleMiddleware(['admin', 'instructor']), getNotificationsByUser);
+router.get('/:user_id', authMiddleware, roleMiddleware(['admin', 'instructor','student']), getNotificationsByUser);
 
 module.exports = router;

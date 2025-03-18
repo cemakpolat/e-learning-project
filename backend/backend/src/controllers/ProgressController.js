@@ -1,17 +1,27 @@
 const AppDataSource = require('../data-source');
 const Progress = require('../models/Progress');
 const CourseContent = require('../models/CourseContent');
-const Enrollment = require ('../models/Enrollment');
+const Enrollment = require('../models/Enrollment');
 const User = require('../models/User');
+const ApiError = require('../utils/apiError');
+const ApiSuccess = require('../utils/apiSuccess');
+
+const { progressCreateSchema } = require('../validation/modelValidations'); 
 const { MoreThanOrEqual } = require('typeorm');
 
 // Mark content as completed
-const markContentCompleted = async (req, res) => {
-  const { user_id, course_id, content_id } = req.body;
-
-  console.log('Mark content as completed request received:', { user_id, course_id, content_id });
-
+const markContentCompleted = async (req, res, next) => {
   try {
+    // Validate input
+    const { error, value } = progressCreateSchema.validate(req.body); // Use progressCreateSchema
+    if (error) {
+      return next(new ApiError(400, error.details[0].message));
+    }
+
+    const { user_id, course_id, content_id } = value;
+
+    console.log('Mark content as completed request received:', { user_id, course_id, content_id });
+
     const progressRepository = AppDataSource.getRepository(Progress);
 
     // Check if the content is already marked as completed
@@ -20,7 +30,7 @@ const markContentCompleted = async (req, res) => {
     });
     if (existingProgress) {
       console.log('Content already marked as completed');
-      return res.status(400).json({ message: 'Content already marked as completed' });
+      return next(new ApiError(400, 'Content already marked as completed'));
     }
 
     // Create a new progress entry
@@ -34,15 +44,15 @@ const markContentCompleted = async (req, res) => {
     await progressRepository.save(progress);
     console.log('Progress created successfully:', progress);
 
-    res.status(201).json({ message: 'Content marked as completed', progress });
+    (new ApiSuccess(201, 'Content marked as completed', progress, null, null)).send(res);
   } catch (err) {
     console.error('Mark content as completed error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
 // Get progress for a user in a course
-const getProgress = async (req, res) => {
+const getProgress = async (req, res, next) => {
   const { user_id, course_id } = req.params;
 
   console.log('Fetching progress for user:', user_id, 'in course:', course_id);
@@ -56,14 +66,14 @@ const getProgress = async (req, res) => {
       relations: ['content'], // Include content details
     });
 
-    res.status(200).json(progress);
+    (new ApiSuccess(201, 'Content progress is received', progress, null, null)).send(res);
   } catch (err) {
     console.error('Get progress error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getCourseTimeAnalytics = async (req, res) => {
+const getCourseTimeAnalytics = async (req, res, next) => {
   const { course_id } = req.params;
 
   console.log('Fetching time analytics for course:', course_id);
@@ -80,14 +90,15 @@ const getCourseTimeAnalytics = async (req, res) => {
     const totalTimeSpent = progress.reduce((sum, entry) => sum + entry.time_spent, 0);
     const averageTimeSpent = progress.length > 0 ? totalTimeSpent / progress.length : 0;
 
-    res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    // res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    (new ApiSuccess(201, 'Time analytics is received', { totalTimeSpent, averageTimeSpent }, null, null)).send(res);
   } catch (err) {
     console.error('Get course time analytics error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getCourseCompletionPercentage = async (req, res) => {
+const getCourseCompletionPercentage = async (req, res, next) => {
   const { user_id, course_id } = req.params;
 
   console.log('Calculating completion percentage for user:', user_id, 'in course:', course_id);
@@ -109,14 +120,15 @@ const getCourseCompletionPercentage = async (req, res) => {
       ? Math.round((completedContent / totalContent) * 100)
       : 0;
 
-    res.status(200).json({ completionPercentage });
+    //res.status(200).json({ completionPercentage });
+    (new ApiSuccess(201, 'Completion percentage is received', completionPercentage, null, null)).send(res);
   } catch (err) {
     console.error('Get completion percentage error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getCourseAnalytics = async (req, res) => {
+const getCourseAnalytics = async (req, res, next) => {
   const { course_id } = req.params;
 
   console.log('Fetching analytics for course:', course_id);
@@ -133,14 +145,15 @@ const getCourseAnalytics = async (req, res) => {
     const totalTimeSpent = progress.reduce((sum, entry) => sum + entry.time_spent, 0);
     const averageTimeSpent = progress.length > 0 ? totalTimeSpent / progress.length : 0;
 
-    res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    // res.status(200).json({ totalTimeSpent, averageTimeSpent });
+    (new ApiSuccess(201, 'Course analytics is received', { totalTimeSpent, averageTimeSpent }, null, null)).send(res);
   } catch (err) {
     console.error('Get course analytics error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getCourseCompletionRate = async (req, res) => {
+const getCourseCompletionRate = async (req, res, next) => {
   const { course_id } = req.params;
 
   console.log('Fetching completion rate for course:', course_id);
@@ -171,12 +184,13 @@ const getCourseCompletionRate = async (req, res) => {
       : 0;
 
     res.status(200).json({ completionRate });
+    (new ApiSuccess(201, 'Completion rate is received',completionRate, null, null)).send(res);
   } catch (err) {
     console.error('Get course completion rate error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
-const getPopularCourses = async (req, res) => {
+const getPopularCourses = async (req, res, next) => {
   try {
     const enrollmentRepository = AppDataSource.getRepository(Enrollment);
 
@@ -190,14 +204,15 @@ const getPopularCourses = async (req, res) => {
       .limit(5) // Top 5 popular courses
       .getRawMany();
 
-    res.status(200).json(popularCourses);
+    // res.status(200).json(popularCourses);
+    (new ApiSuccess(201, 'Popular courses are received',popularCourses, null, null)).send(res);
   } catch (err) {
     console.error('Get popular courses error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getUserEngagement = async (req, res) => {
+const getUserEngagement = async (req, res, next) => {
   try {
     const progressRepository = AppDataSource.getRepository(Progress);
 
@@ -217,14 +232,15 @@ const getUserEngagement = async (req, res) => {
     // Calculate average interactions per user
     const interactionsPerUser = recentProgress.length / activeUsers;
 
-    res.status(200).json({ activeUsers, interactionsPerUser });
+    //res.status(200).json({ activeUsers, interactionsPerUser });
+    (new ApiSuccess(201, 'User engagements are received',{ activeUsers, interactionsPerUser }, null, null)).send(res);
   } catch (err) {
     console.error('Get user engagement error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getRetentionRates = async (req, res) => {
+const getRetentionRates = async (req, res, next) => {
   try {
     const userRepository = AppDataSource.getRepository(User);
     const progressRepository = AppDataSource.getRepository(Progress);
@@ -269,13 +285,14 @@ const getRetentionRates = async (req, res) => {
     const totalUsers = filteredRetentionRates.length;
     const retentionRate = totalUsers > 0 ? Math.round((activeUsers / totalUsers) * 100) : 0;
 
-    res.status(200).json({ retentionRate, userRetention: filteredRetentionRates });
+    // res.status(200).json({ retentionRate, userRetention: filteredRetentionRates });
+    (new ApiSuccess(201, 'Retention rates are received',{ retentionRate, userRetention: filteredRetentionRates }, null, null)).send(res);
   } catch (err) {
     console.error('Get retention rates error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
-const getContentPopularity = async (req, res) => {
+const getContentPopularity = async (req, res, next) => {
   const { course_id } = req.params;
 
   console.log('Fetching content popularity for course:', course_id);
@@ -303,14 +320,15 @@ const getContentPopularity = async (req, res) => {
     // Sort by interactions (descending)
     popularityArray.sort((a, b) => b.interactions - a.interactions);
 
-    res.status(200).json(popularityArray);
+    // res.status(200).json(popularityArray);
+    (new ApiSuccess(200, 'Popularity content is received',popularityArray, null, null)).send(res);
   } catch (err) {
     console.error('Get content popularity error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
 
-const getUserProgressOverTime = async (req, res) => {
+const getUserProgressOverTime = async (req, res, next) => {
   const { user_id, course_id } = req.params;
 
   console.log('Fetching progress over time for user:', user_id, 'in course:', course_id);
@@ -331,36 +349,13 @@ const getUserProgressOverTime = async (req, res) => {
       time_spent: entry.time_spent,
     }));
 
-    res.status(200).json(timeline);
+    // res.status(200).json(timeline);
+    (new ApiSuccess(200, 'User progress over time is received',timeline, null, null)).send(res);
   } catch (err) {
     console.error('Get user progress over time error:', err);
-    res.status(500).json({ message: 'Server error' });
+    return next(new ApiError(500, 'Server error'));
   }
 };
-// const getUserProgressOverTime = async (req, res) => {
-//   const { user_id, course_id } = req.params;
-
-//   console.log('Fetching progress over time for user:', user_id, 'in course:', course_id);
-
-//   try {
-//     const progressRepository = AppDataSource.getRepository(Progress);
-
-//     // Fetch all progress entries for the user in the course
-//     const progress = await progressRepository.find({
-//       where: { user_id, course_id },
-//       order: { completed_at: 'ASC' },
-//     });
-
-//     // Format the data for the chart
-//     const labels = progress.map((entry) => new Date(entry.completed_at).toLocaleDateString());
-//     const data = progress.map((entry) => entry.time_spent);
-
-//     res.status(200).json({ labels, data });
-//   } catch (err) {
-//     console.error('Get user progress over time error:', err);
-//     res.status(500).json({ message: 'Server error' });
-//   }
-// };
 
 module.exports = {
   markContentCompleted,

@@ -1,5 +1,6 @@
 
 // middleware/roleMiddleware.js
+const ApiError = require('../utils/apiError');
 const roleMiddleware = (allowedRoles) => {
     return (req, res, next) => {
       const userRole = req.user.role; // Assuming the user object is attached to the request after authentication

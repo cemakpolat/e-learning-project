@@ -34,6 +34,7 @@ module.exports = new EntitySchema({
       joinColumn: {
         name: 'instructor_id',
         referencedColumnName: 'id',
+        onDelete: 'SET DEFAULT' // Set to a default platform admin ID
       },
       inverseSide: 'courses',
     },
@@ -41,11 +42,12 @@ module.exports = new EntitySchema({
       target: 'CourseContent',
       type: 'one-to-many',
       inverseSide: 'course',
+      cascade: ["remove"]
     },
     enrollments: {  
       target: 'Enrollment',
       type: 'one-to-many',
-      inverseSide: 'course', // Assuming Enrollment has a 'course' relation
+      inverseSide: 'course', 
     },
   },
 });
